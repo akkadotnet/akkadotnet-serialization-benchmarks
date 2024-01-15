@@ -18,6 +18,7 @@ using Akka.Serialization;
 using Akka.Serialization.MessagePack;
 using Akka.Util;
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 using Newtonsoft.Json;
 
@@ -223,37 +224,49 @@ namespace SerializationBenchmarks
         private readonly byte[] _binaryRep_poly_inherited;
         private readonly string _binaryRep_poly_inherited_manifest;
 
-        private const int _numIters = 10000; 
+        private const int _numIters = 1000; 
         
-        private void Serialize(int wat)
+        private void Serialize(int wat, bool parallel = false)
         {
-            for (int i = 0; i < _numIters; i++)
+            if (parallel)
             {
-                switch (wat)
+                for (int i = 0; i < _numIters; i++)
                 {
-                    case 0:
-                    _poolSer.ToBinary(testObj);
-                    break;
-                    case 1:
-                        _poolSer.ToBinary(testObj_WithRef);
-                        break;
-                    case 2:
-                        _poolSer.ToBinary(_testObj_inheriting);
-                        break;
-                    case 3:
-                        _poolSer.ToBinary(_testObj_sealed);
-                        break;
-                    case 4:
-                        _poolSer.ToBinary(_testObj_poly);
-                        break;
-                    case 5:
-                        _poolSer.ToBinary(_testObj_poly_inherited);
-                        break;
+                    DoSerInternal(wat);
                 }
             }
+            else
+            {
+                DoSerInternal(wat);
+            }
         }
-        
-        private void DeSerialize(int wat)
+
+        private void DoSerInternal(int wat)
+        {
+            switch (wat)
+            {
+                case 0:
+                    _poolSer.ToBinary(testObj);
+                    break;
+                case 1:
+                    _poolSer.ToBinary(testObj_WithRef);
+                    break;
+                case 2:
+                    _poolSer.ToBinary(_testObj_inheriting);
+                    break;
+                case 3:
+                    _poolSer.ToBinary(_testObj_sealed);
+                    break;
+                case 4:
+                    _poolSer.ToBinary(_testObj_poly);
+                    break;
+                case 5:
+                    _poolSer.ToBinary(_testObj_poly_inherited);
+                    break;
+            }
+        }
+
+        private void DeSerialize(int wat, bool parallel = false)
         {
             byte[] _bR = null;
             string manifest = string.Empty;
@@ -291,17 +304,30 @@ namespace SerializationBenchmarks
                     _t = typeof(TestSer_Enclosed_Polymorphic_TestSerNoRef);
                     break;
             }
-            for (int i = 0; i < _numIters; i++)
+
+            if (parallel)
             {
-                if (_poolSer.IncludeManifest && _poolSer is SerializerWithStringManifest swsm)
+                for (int i = 0; i < _numIters; i++)
                 {
-                        swsm.FromBinary(_bR, manifest);
+                    DoDeserInternal(_bR, manifest, _t);
                 }
-                else
-                {
-                    _poolSer.FromBinary(_bR,
-                        _t);
-                }
+            }
+            else
+            {
+                DoDeserInternal(_bR,manifest,_t);
+            }
+        }
+
+        private void DoDeserInternal(byte[]? _bR, string manifest, Type? _t)
+        {
+            if (_poolSer.IncludeManifest && _poolSer is SerializerWithStringManifest swsm)
+            {
+                swsm.FromBinary(_bR, manifest);
+            }
+            else
+            {
+                _poolSer.FromBinary(_bR,
+                    _t);
             }
         }
 
@@ -373,7 +399,7 @@ namespace SerializationBenchmarks
         private void MultiTasks_Do(int wat)
         {
             Task.WaitAll(Enumerable.Repeat(wat,10)
-                .Select((i) => Task.Run(()=>Serialize(i))).ToArray());
+                .Select((i) => Task.Run(()=>Serialize(i,true))).ToArray());
         }
         
         [Benchmark]
@@ -434,7 +460,7 @@ namespace SerializationBenchmarks
         private void DeserializeMultiTasks_Do(int wat)
         {
             Task.WaitAll(Enumerable.Repeat(wat,10)
-                .Select((i) => Task.Run(()=>DeSerialize(i))).ToArray());
+                .Select((i) => Task.Run(()=>DeSerialize(i,true))).ToArray());
         }
     }
 }
